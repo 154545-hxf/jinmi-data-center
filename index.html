@@ -466,7 +466,11 @@ window.SEED_DATA = {"daily": [{"年": 2026, "月": 7, "日": 13, "账号名称":
 
 /* ---------------- 数据层 ---------------- */
 const STORE_KEY = "jinmi_data_v1";
-let DB = loadDB();
+// 注意：这里只声明 DB，不要在此处调用 loadDB()。loadDB() 内部会调用 dedupeObj()，
+// 而 DEDUPE 是 const（见下方第 315 行），若顶层提前执行 loadDB() 会触发 TDZ 报错
+// "Cannot access 'DEDUPE' before initialization"。DB 的真正初始化放在文件末尾的 boot() 里，
+// 此时所有声明均已就绪。
+let DB;
 
 function loadDB() {
   // 优先使用内嵌数据（自包含网页模式：数据写在 HTML 里，双击即持久）
