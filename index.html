@@ -64,12 +64,6 @@ p.pagedesc{color:var(--sub);font-size:13px;margin-bottom:16px}
   .cards{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
   .kpi .value{font-size:21px}
   .chartbox{height:220px}
-  /* 列筛选：手机端改为居中弹窗 + 遮罩，避免被 overflow 裁掉、点不到 */
-  .colbackdrop.show{display:block;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9998}
-  .colmenu{position:fixed;left:50%;top:50%;right:auto;transform:translate(-50%,-50%);width:min(92vw,380px);max-height:74vh;z-index:9999;padding:16px;border-radius:14px}
-  .colmenu .cm-head{font-size:15px;margin-bottom:10px}
-  .colmenu label{font-size:15px;padding:11px 4px}
-  .colmenu input[type=checkbox]{width:20px;height:20px}
 }
 .chartbox{position:relative;height:280px}
 
@@ -93,6 +87,12 @@ p.pagedesc{color:var(--sub);font-size:13px;margin-bottom:16px}
 .colmenu{display:none;position:absolute;right:0;top:calc(100% + 6px);background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,.14);padding:10px 12px;z-index:60;min-width:200px;max-height:340px;overflow:auto}
 .colmenu.show{display:block}
 .colbackdrop{display:none}
+/* 居中弹窗（手机端触发）：弹窗作为遮罩直接子元素，flex 居中，无 fixed/transform，杜绝被裁/层级问题 */
+.colbackdrop.show{display:flex;align-items:center;justify-content:center;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:9998}
+.colbackdrop .colmenu{position:static;display:block;width:min(92vw,380px);max-height:78vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);padding:16px;margin:auto}
+.colbackdrop .colmenu .cm-head{font-size:15px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.colbackdrop .colmenu label{font-size:15px;padding:11px 4px}
+.colbackdrop .colmenu input[type=checkbox]{width:20px;height:20px}
 .colmenu label{font-size:14px;padding:9px 4px}
 .colmenu input[type=checkbox]{width:18px;height:18px}
 .colmenu .cm-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;font-size:12.5px;white-space:nowrap}
@@ -172,7 +172,7 @@ tr.drow td:first-child{border-left:3px solid #c7d2fe}
 </head>
 <body>
 <div id="bootError" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#b91c1c;color:#fff;font:13px/1.5 monospace;padding:10px;white-space:pre-wrap;max-height:40%;overflow:auto;"></div>
-<div id="colBackdrop" class="colbackdrop" onclick="closeAllColMenus()"></div>
+<div id="colBackdrop" class="colbackdrop" onclick="if(event.target===this)closeAllColMenus()"></div>
 <div class="topbar">
   <div class="brand">📊 金米财税 · <span>数据中心</span></div>
   <nav class="nav" id="nav">
@@ -1064,7 +1064,7 @@ function buildColMenu(id) {
   const def = COLPICK_DEFS[id];
   const hidden = colHiddenSet(id);
   const lockedCols = def.locked().filter(Boolean);
-  let html = `<div class="cm-head"><b>显示列</b><span><a onclick="setAllCols('${id}',true)">全选</a>　<a onclick="setAllCols('${id}',false)">清空</a></span></div>`;
+  let html = `<div class="cm-head"><b>显示列</b><span><a onclick="setAllCols('${id}',true)">全选</a>　<a onclick="setAllCols('${id}',false)">清空</a>　<a onclick="closeAllColMenus()">✕</a></span></div>`;
   if (lockedCols.length) html += `<div class="cm-note">固定列：${lockedCols.map(esc).join("、")}</div>`;
   def.cols().forEach(c => {
     html += `<label><input type="checkbox" ${hidden.has(c) ? "" : "checked"} onchange="onColToggle('${id}','${encKey(c)}',this.checked)"> ${esc(HEADER_ALIAS[c] || c)}</label>`;
@@ -1093,8 +1093,13 @@ function setAllCols(id, show) {
   buildColMenu(id);
   def.rerender();
 }
+const _colHosts = {};
 function closeAllColMenus() {
-  document.querySelectorAll(".colmenu").forEach(x => x.classList.remove("show"));
+  document.querySelectorAll(".colmenu.show").forEach(m => {
+    m.classList.remove("show");
+    const id = m.id.replace("colmenu-", "");
+    if (_colHosts[id]) { _colHosts[id].appendChild(m); delete _colHosts[id]; }
+  });
   const b = document.getElementById("colBackdrop");
   if (b) b.classList.remove("show");
 }
@@ -1102,10 +1107,19 @@ function toggleColMenu(id) {
   const m = $("#colmenu-" + id);
   const wasShown = m.classList.contains("show");
   closeAllColMenus();
-  if (!wasShown) { buildColMenu(id); m.classList.add("show"); const b = document.getElementById("colBackdrop"); if (b) b.classList.add("show"); }
+  if (wasShown) return;
+  buildColMenu(id);
+  const mobile = window.matchMedia("(max-width:768px)").matches;
+  if (mobile) {
+    _colHosts[id] = m.parentNode;
+    document.getElementById("colBackdrop").appendChild(m);
+    document.getElementById("colBackdrop").classList.add("show");
+  }
+  m.classList.add("show");
 }
 document.addEventListener("click", e => {
-  if (!e.target.closest(".colpick")) closeAllColMenus();
+  if (e.target.closest(".colpick") || e.target.closest(".colmenu")) return;
+  closeAllColMenus();
 });
 
 /* ---------------- 日数据（按天汇总 + 展开详情） ---------------- */
