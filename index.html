@@ -47,13 +47,29 @@ p.pagedesc{color:var(--sub);font-size:13px;margin-bottom:16px}
 @media(max-width:900px){.grid2{grid-template-columns:1fr}}
 /* 手机端：顶栏换行，导航独占整行并可横向滑动，避免按钮被挤到屏幕外点不到 */
 @media(max-width:768px){
+  .wrap{padding:12px}
   .topbar{flex-wrap:wrap;height:auto;padding:8px 12px;gap:8px;align-items:center}
   .brand{font-size:15px;flex:1 1 auto}
   .right{display:none}
   .nav{order:5;flex:1 1 100%;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
-  .nav button{flex:0 0 auto}
+  .nav button{flex:0 0 auto;padding:9px 14px;font-size:14px}
   .panel{overflow-x:auto}
-  .toolbar{flex-wrap:wrap}
+  .toolbar{flex-wrap:wrap;gap:8px;align-items:center}
+  .toolbar input[type=text]{flex:1 1 100%}
+  .toolbar select,.toolbar input[type=date]{min-height:38px;font-size:15px}
+  .toolbar .rangewrap{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+  .btn{min-height:38px;font-size:14px;padding:8px 12px}
+  .seg{display:flex;flex-wrap:wrap;gap:6px}
+  .seg button{min-height:36px;font-size:14px}
+  .cards{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+  .kpi .value{font-size:21px}
+  .chartbox{height:220px}
+  /* 列筛选：手机端改为居中弹窗 + 遮罩，避免被 overflow 裁掉、点不到 */
+  .colbackdrop.show{display:block;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9998}
+  .colmenu{position:fixed;left:50%;top:50%;right:auto;transform:translate(-50%,-50%);width:min(92vw,380px);max-height:74vh;z-index:9999;padding:16px;border-radius:14px}
+  .colmenu .cm-head{font-size:15px;margin-bottom:10px}
+  .colmenu label{font-size:15px;padding:11px 4px}
+  .colmenu input[type=checkbox]{width:20px;height:20px}
 }
 .chartbox{position:relative;height:280px}
 
@@ -76,6 +92,9 @@ p.pagedesc{color:var(--sub);font-size:13px;margin-bottom:16px}
 .colpick{position:relative;display:inline-block}
 .colmenu{display:none;position:absolute;right:0;top:calc(100% + 6px);background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,.14);padding:10px 12px;z-index:60;min-width:200px;max-height:340px;overflow:auto}
 .colmenu.show{display:block}
+.colbackdrop{display:none}
+.colmenu label{font-size:14px;padding:9px 4px}
+.colmenu input[type=checkbox]{width:18px;height:18px}
 .colmenu .cm-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;font-size:12.5px;white-space:nowrap}
 .colmenu .cm-head a{cursor:pointer;color:var(--primary)}
 .colmenu .cm-note{font-size:11.5px;color:var(--sub);margin-bottom:6px;white-space:nowrap}
@@ -153,6 +172,7 @@ tr.drow td:first-child{border-left:3px solid #c7d2fe}
 </head>
 <body>
 <div id="bootError" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#b91c1c;color:#fff;font:13px/1.5 monospace;padding:10px;white-space:pre-wrap;max-height:40%;overflow:auto;"></div>
+<div id="colBackdrop" class="colbackdrop" onclick="closeAllColMenus()"></div>
 <div class="topbar">
   <div class="brand">📊 金米财税 · <span>数据中心</span></div>
   <nav class="nav" id="nav">
@@ -885,6 +905,7 @@ $("#nav").addEventListener("click", e => {
   if (b) go(b.dataset.page);
 });
 function go(page) {
+  closeAllColMenus();
   state.page = page;
   document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("active", b.dataset.page === page));
   document.querySelectorAll(".page").forEach(p => p.classList.toggle("show", p.id === "page-" + page));
@@ -1072,14 +1093,19 @@ function setAllCols(id, show) {
   buildColMenu(id);
   def.rerender();
 }
+function closeAllColMenus() {
+  document.querySelectorAll(".colmenu").forEach(x => x.classList.remove("show"));
+  const b = document.getElementById("colBackdrop");
+  if (b) b.classList.remove("show");
+}
 function toggleColMenu(id) {
   const m = $("#colmenu-" + id);
   const wasShown = m.classList.contains("show");
-  document.querySelectorAll(".colmenu").forEach(x => x.classList.remove("show"));
-  if (!wasShown) { buildColMenu(id); m.classList.add("show"); }
+  closeAllColMenus();
+  if (!wasShown) { buildColMenu(id); m.classList.add("show"); const b = document.getElementById("colBackdrop"); if (b) b.classList.add("show"); }
 }
 document.addEventListener("click", e => {
-  if (!e.target.closest(".colpick")) document.querySelectorAll(".colmenu").forEach(x => x.classList.remove("show"));
+  if (!e.target.closest(".colpick")) closeAllColMenus();
 });
 
 /* ---------------- 日数据（按天汇总 + 展开详情） ---------------- */
