@@ -45,6 +45,16 @@ p.pagedesc{color:var(--sub);font-size:13px;margin-bottom:16px}
 .panel h3{font-size:15px;margin-bottom:12px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+/* 手机端：顶栏换行，导航独占整行并可横向滑动，避免按钮被挤到屏幕外点不到 */
+@media(max-width:768px){
+  .topbar{flex-wrap:wrap;height:auto;padding:8px 12px;gap:8px;align-items:center}
+  .brand{font-size:15px;flex:1 1 auto}
+  .right{display:none}
+  .nav{order:5;flex:1 1 100%;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+  .nav button{flex:0 0 auto}
+  .panel{overflow-x:auto}
+  .toolbar{flex-wrap:wrap}
+}
 .chartbox{position:relative;height:280px}
 
 /* Toolbar */
