@@ -179,6 +179,7 @@ tr.drow td:first-child{border-left:3px solid #c7d2fe}
     <button data-page="overview" class="active">概览</button>
     <button data-page="daily">日数据</button>
     <button data-page="pivot">透视表</button>
+    <button data-page="summary">汇总统计</button>
     <button data-page="kezi">线索</button>
     <button data-page="videos">素材</button>
     <button data-page="upload">上传录入</button>
@@ -265,6 +266,29 @@ tr.drow td:first-child{border-left:3px solid #c7d2fe}
     </div>
     <div class="count" id="pivotCount"></div>
     <div class="tablebox" id="pivotTable"></div>
+  </section>
+
+  <!-- 汇总统计 -->
+  <section class="page" id="page-summary">
+    <h2 class="pagetitle">汇总统计</h2>
+    <p class="pagedesc">按你指定的时间段生成数据汇总统计表（投放消耗 / 展现 / 线索 / 留资 / 留资成本），可切换统计维度，支持导出 Excel</p>
+    <div class="toolbar">
+      <span class="rangewrap"><input type="date" id="summaryFrom"> 至 <input type="date" id="summaryTo"></span>
+      <div class="seg" id="summarySeg">
+        <button data-v="日期" class="active">按日期</button>
+        <button data-v="账号">按账号</button>
+        <button data-v="渠道">按渠道</button>
+      </div>
+      <button class="btn" onclick="renderSummary()">📊 生成汇总表</button>
+      <span class="spacer"></span>
+      <span class="count" id="summaryStat"></span>
+      <button class="btn ghost sm need-admin" onclick="exportSummary()">导出Excel</button>
+    </div>
+    <div class="cards" id="summaryKpi"></div>
+    <div class="panel">
+      <h3 id="summaryTableTitle">按日期汇总</h3>
+      <div class="tablebox" id="summaryTable"></div>
+    </div>
   </section>
 
   <!-- 线索（全量客户资源池） -->
@@ -900,7 +924,7 @@ function cleanDuplicates() {
 }
 
 /* ---------------- 导航 ---------------- */
-const state = { page: "overview", dailyView: "daily", pivotDim: "账号名称" };
+const state = { page: "overview", dailyView: "daily", pivotDim: "账号名称", summaryDim: "日期" };
 $("#nav").addEventListener("click", e => {
   const b = e.target.closest("button");
   if (b) go(b.dataset.page);
@@ -911,6 +935,7 @@ function go(page) {
   document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("active", b.dataset.page === page));
   document.querySelectorAll(".page").forEach(p => p.classList.toggle("show", p.id === "page-" + page));
   if (page === "overview") renderOverview();
+  if (page === "summary") renderSummary();
 }
 
 /* ---------------- 概览 ---------------- */
@@ -1353,6 +1378,104 @@ function exportPivot() {
   XLSX.writeFile(wb, `透视表_${state.pivotDim}_${today()}.xlsx`);
 }
 
+/* ---------------- 汇总统计（指定时间段） ---------------- */
+function summaryData() {
+  const from = $("#summaryFrom").value, to = $("#summaryTo").value;
+  const inRange = d => !d || ((!from || d >= from) && (!to || d <= to));
+  const dim = state.summaryDim;
+  const drows = DB.daily.filter(r => inRange(dateOf(r)));
+  const custPool = buildCustPool().filter(r => inRange(r["日期"] || ""));
+  const cost = drows.reduce((s, r) => s + num(r["消耗"]), 0);
+  const show = drows.reduce((s, r) => s + num(r["展现"]), 0);
+  const liuzi = drows.reduce((s, r) => s + num(r["私信留资数"]), 0);
+  const leads = custPool.length;
+  const liuziCost = liuzi > 0 ? cost / liuzi : 0;
+  const days = new Set(drows.map(r => dateOf(r)).filter(Boolean));
+
+  let rows = [], cols = [], title = "";
+  if (dim === "日期" || dim === "账号") {
+    const keyOf = dim === "日期" ? (r => dateOf(r)) : (r => (r["账号名称"] || "未知"));
+    const map = {};
+    drows.forEach(r => {
+      const k = keyOf(r); if (!k) return;
+      const o = map[k] = map[k] || { cost: 0, show: 0, liuzi: 0 };
+      o.cost += num(r["消耗"]); o.show += num(r["展现"]); o.liuzi += num(r["私信留资数"]);
+    });
+    const leadMap = {};
+    custPool.forEach(r => {
+      const k = dim === "日期" ? (r["日期"] || "") : (r["账号名称"] || "未知");
+      if (k) leadMap[k] = (leadMap[k] || 0) + 1;
+    });
+    const keys = Object.keys(map).sort();
+    rows = keys.map(k => {
+      const o = map[k]; const l = leadMap[k] || 0;
+      return { 维度: k, 投放消耗: o.cost, 展现: o.show, 线索数: l, 投放留资数: o.liuzi, 留资成本: o.liuzi > 0 ? +(o.cost / o.liuzi).toFixed(2) : null };
+    });
+    cols = ["维度", "投放消耗", "展现", "线索数", "投放留资数", "留资成本"];
+    title = dim === "日期" ? "按日期汇总" : "按账号汇总";
+  } else {
+    const leadMap = {};
+    custPool.forEach(r => { const c = r["营销类型"] || "未知"; leadMap[c] = (leadMap[c] || 0) + 1; });
+    const total = leads || 1;
+    rows = Object.keys(leadMap).sort((a, b) => leadMap[b] - leadMap[a]).map(c => ({ 维度: c, 线索数: leadMap[c], 占比: +(leadMap[c] / total).toFixed(4) }));
+    cols = ["维度", "线索数", "占比"];
+    title = "按渠道（线索来源）汇总";
+  }
+
+  const totals = { 维度: "合计" };
+  if (dim !== "渠道") {
+    totals["投放消耗"] = rows.reduce((s, r) => s + num(r["投放消耗"]), 0);
+    totals["展现"] = rows.reduce((s, r) => s + num(r["展现"]), 0);
+    totals["线索数"] = rows.reduce((s, r) => s + num(r["线索数"]), 0);
+    totals["投放留资数"] = rows.reduce((s, r) => s + num(r["投放留资数"]), 0);
+    totals["留资成本"] = totals["投放留资数"] > 0 ? +(totals["投放消耗"] / totals["投放留资数"]).toFixed(2) : null;
+  } else {
+    totals["线索数"] = rows.reduce((s, r) => s + num(r["线索数"]), 0);
+    totals["占比"] = 1;
+  }
+  return { from, to, dim, cost, show, liuzi, leads, liuziCost, days: days.size, rows, cols, totals, title };
+}
+
+function renderSummary() {
+  const d = summaryData();
+  $("#summaryStat").innerHTML = `统计范围：<b>${d.from || "最早"}</b> ~ <b>${d.to || "最新"}</b>${d.dim !== "日期" ? "　维度：<b>" + esc(d.dim) + "</b>" : ""}　投放 ${d.rows.length} 组 / 线索 ${d.leads} 条 / 覆盖 ${d.days} 天`;
+  $("#summaryKpi").innerHTML = `
+    <div class="kpi c1"><div class="label">投放消耗</div><div class="value">¥${fmt(d.cost)}</div></div>
+    <div class="kpi c4"><div class="label">展现量</div><div class="value">${fmt(d.show)}</div></div>
+    <div class="kpi c2"><div class="label">线索总数</div><div class="value">${fmt(d.leads)}<small> 条</small></div></div>
+    <div class="kpi c3"><div class="label">投放留资数</div><div class="value">${fmt(d.liuzi)}<small> 个</small></div></div>
+    <div class="kpi c5"><div class="label">留资成本</div><div class="value">${d.liuzi > 0 ? "¥" + fmt(d.liuziCost) : "-"}</div></div>
+    <div class="kpi c1"><div class="label">覆盖天数</div><div class="value">${d.days}<small> 天</small></div></div>`;
+  $("#summaryTableTitle").textContent = d.title;
+
+  const cell = (c, r) => {
+    if (c === "投放消耗") return "¥" + fmt(num(r[c]));
+    if (c === "展现") return fmt(num(r[c]));
+    if (c === "线索数" || c === "投放留资数") return fmt(num(r[c]));
+    if (c === "留资成本") return r[c] == null ? "-" : "¥" + fmt(r[c]);
+    if (c === "占比") return (num(r[c]) * 100).toFixed(1) + "%";
+    return esc(r[c] ?? "");
+  };
+  if (!d.rows.length) { $("#summaryTable").innerHTML = `<div class="empty">该时间段暂无数据，可前往「上传录入」添加</div>`; return; }
+  let html = "<table><thead><tr>" + d.cols.map(c => `<th class="${c === "维度" ? "" : "num"}">${esc(c)}</th>`).join("") + "</tr></thead><tbody>";
+  for (const r of d.rows) html += "<tr>" + d.cols.map(c => `<td class="${c === "维度" ? "" : "num"}">${cell(c, r)}</td>`).join("") + "</tr>";
+  html += `<tr style="font-weight:700;background:#f1f5f9">` + d.cols.map(c => `<td class="${c === "维度" ? "" : "num"}">${cell(c, d.totals)}</td>`).join("") + `</tr>`;
+  html += "</tbody></table>";
+  $("#summaryTable").innerHTML = html;
+}
+
+function exportSummary() {
+  if (!isAdmin()) { toast("🔒 导出含客户资料，仅管理员可用"); return; }
+  const d = summaryData();
+  if (!d.rows.length) { toast("该时间段暂无数据，无法导出"); return; }
+  const out = d.rows.map(r => { const o = {}; d.cols.forEach(c => o[c] = r[c]); return o; });
+  out.push((() => { const o = {}; d.cols.forEach(c => o[c] = d.totals[c]); return o; })());
+  const ws = XLSX.utils.json_to_sheet(out);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, d.title.slice(0, 28));
+  XLSX.writeFile(wb, `汇总统计_${d.dim}_${d.from || "起"}_${d.to || "止"}_${today()}.xlsx`);
+}
+
 /* ---------------- 线索（全量客户资源池） ---------------- */
 function buildCustPool() {
   const groups = new Map();
@@ -1731,6 +1854,7 @@ function renderAll() {
   renderOverview();
   renderDaily();
   renderPivot();
+  renderSummary();
   renderCust();
   renderVideos();
 }
@@ -1738,6 +1862,13 @@ function renderAll() {
 $("#ovAccount").addEventListener("change", renderOverview);
 ["dailySearch", "dailyAccount", "dailyYear", "dailyMonth", "dailyFrom", "dailyTo"].forEach(id => $("#" + id).addEventListener("input", renderDaily));
 ["pivotMonth", "pivotAccount", "pivotFrom", "pivotTo"].forEach(id => $("#" + id).addEventListener("input", renderPivot));
+$("#summarySeg").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  state.summaryDim = b.dataset.v;
+  document.querySelectorAll("#summarySeg button").forEach(x => x.classList.toggle("active", x === b));
+  renderSummary();
+});
+["summaryFrom", "summaryTo"].forEach(id => $("#" + id).addEventListener("input", renderSummary));
 ["custSearch", "custSource", "custSubject", "custType", "custFrom", "custTo"].forEach(id => $("#" + id).addEventListener("input", renderCust));
 ["videoSearch", "videoAccount", "videoConv", "videoSort"].forEach(id => $("#" + id).addEventListener("input", renderVideos));
 
