@@ -754,6 +754,8 @@ function dateOf(r) { // 年/月/日 -> yyyy-mm-dd
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 function num(v) { const n = parseFloat(String(v).replace(/[,，%元]/g, "")); return isNaN(n) ? 0 : n; }
+/* 占位符视为空：合并线索时，"-"/"未知"/"无"等不算有效值，应被对方真实数据补齐 */
+function isEmptyVal(v) { return v === undefined || v === null || v === "" || v === "-" || v === "未知" || v === "无"; }
 /* 规范化（去重用）：去首尾空格、折叠内部空白、统一大小写 */
 function normKey(s) { return String(s ?? "").trim().replace(/\s+/g, " ").toLowerCase(); }
 /* 视频标题清理：去掉 # 开头的话题标签（含其后的全部内容） */
@@ -1525,12 +1527,12 @@ function buildCustPool() {
     rec.__key = e.__key;
     // 客资中心优先，快商通为补充；来源不合并为"客资中心+快商通"
     if ((SRC_RANK[rec["来源"]] || 0) > (SRC_RANK[e["来源"]] || 0)) {
-      // 新记录优先级更高：以新记录为主，仅用旧记录补齐其空缺字段
-      for (const f of FIELDS) if (!rec[f] && e[f]) rec[f] = e[f];
+      // 新记录优先级更高：以新记录为主，仅用旧记录补齐其空缺字段（占位符视为空）
+      for (const f of FIELDS) if (isEmptyVal(rec[f]) && !isEmptyVal(e[f])) rec[f] = e[f];
       groups.set(e.__key, rec);
     } else {
-      // 保留原记录，用新记录（低优先级）补齐空缺字段
-      for (const f of FIELDS) if (!e[f] && rec[f]) e[f] = rec[f];
+      // 保留原记录，用新记录（低优先级）补齐空缺字段（占位符视为空）
+      for (const f of FIELDS) if (isEmptyVal(e[f]) && !isEmptyVal(rec[f])) e[f] = rec[f];
     }
   };
   DB.leads.forEach(r => push({
