@@ -870,7 +870,10 @@ function doViewerUnlock() {
 const videoDedupeKey = r => [normKey(r["素材ID"]), normKey(r["视频标题"]), normKey(r["发布日期"]),
   num(r["消耗(元)"]), num(r["展示次数"]), num(r["点击次数"]), num(r["转化数"]), num(r["播放数"]), num(r["转化成本(元)"])].join("|");
 const DEDUPE = {
-  daily: r => [dateOf(r), normKey(r["账号名称"]), normKey(r["素材名称"])].join("|"),
+  // 素材日明细去重主键：日期+账号+素材名称+核心数据字段。
+  // 同一天、同一素材名称但数据(消耗/展现/留资等)不同 => 视为两条有效记录，必须分别保留（不再被误判重复而丢弃）。
+  daily: r => [dateOf(r), normKey(r["账号名称"]), normKey(r["素材名称"]),
+    num(r["消耗"]), num(r["展现"]), num(r["私信留资数"]), num(r["点击次数"]), num(r["转化数"]), num(r["转化成本(元)"])].join("|"),
   gongshang: r => [dateOf(r), normKey(r["账号名称"])].join("|"),
   leads: r => normKey(r["客户编号"]) || [normKey(r["手机号"]), normKey(r["开始对话时间"])].join("|"),
   kezi: r => [normKey(r["手机号"]), normKey(r["线索创建时间"])].join("|"),
@@ -1680,7 +1683,7 @@ function renderVideos() {
 
 /* ---------------- 上传识别 ---------------- */
 const TYPE_DEFS = [
-  { key: "daily", name: "城市账号底表（素材日明细）", must: ["账号名称", "素材名称", "消耗"], any: ["私信留资数", "展现", "点击次数"], dedupe: r => [dateOf(r), r["账号名称"], r["素材名称"]].join("|") },
+  { key: "daily", name: "城市账号底表（素材日明细）", must: ["账号名称", "素材名称", "消耗"], any: ["私信留资数", "展现", "点击次数"], dedupe: r => [dateOf(r), normKey(r["账号名称"]), normKey(r["素材名称"]), num(r["消耗"]), num(r["展现"]), num(r["私信留资数"]), num(r["点击次数"]), num(r["转化数"]), num(r["转化成本(元)"])].join("|") },
   { key: "gongshang", name: "工商底表（账号日汇总）", must: ["账号名称", "消费"], any: ["留资", "点击"], dedupe: r => [dateOf(r), r["账号名称"]].join("|") },
   { key: "leads", name: "快商通线索（总数据）", must: ["客户编号", "来源渠道"], any: ["访客名称", "开始对话时间"], dedupe: r => r["客户编号"] || [r["手机号"], r["开始对话时间"]].join("|") },
   { key: "kezi", name: "客资中心线索", must: ["手机号", "线索创建时间"], any: ["意向门店", "线索阶段", "营销类型"], dedupe: r => [r["手机号"], r["线索创建时间"]].join("|") },
