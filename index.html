@@ -995,6 +995,7 @@ function renderOverview() {
   const videoCnt = DB.videos.length;
   const liuzi = drows.reduce((s, r) => s + num(r["私信留资数"]), 0);
   const liuziCost = liuzi > 0 ? cost / liuzi : 0;
+  const totalLeadsCost = totalLeads > 0 ? cost / totalLeads : 0;
   $("#ovStat").innerHTML = `筛选：${acc ? "账号 <b>" + esc(acc) + "</b>" : "全部账号"}${from || to ? "　日期 <b>" + (from || "…") + " ~ " + (to || "…") + "</b>" : ""}`;
 
   $("#kpiCards").innerHTML = `
@@ -1004,7 +1005,8 @@ function renderOverview() {
     <div class="kpi c4"><div class="label">展现量</div><div class="value">${fmt(show)}</div></div>
     <div class="kpi c1"><div class="label">视频发布数</div><div class="value">${videoCnt}<small> 条</small></div></div>
     <div class="kpi c2"><div class="label">投放留资数</div><div class="value">${fmt(liuzi)}<small> 个</small></div></div>
-    <div class="kpi c5"><div class="label">投放留资成本</div><div class="value">${liuzi > 0 ? "¥" + fmt(liuziCost) : "-"}</div></div>`;
+    <div class="kpi c5"><div class="label">投放留资成本</div><div class="value">${liuzi > 0 ? "¥" + fmt(liuziCost) : "-"}</div></div>
+    <div class="kpi c3"><div class="label">总留资成本</div><div class="value">${totalLeads > 0 ? "¥" + fmt(totalLeadsCost) : "-"}</div></div>`;
 
   // 每日聚合（随账号/日期筛选联动：用已过滤的 drows 而非全量 DB.daily）
   const byDate = {};
